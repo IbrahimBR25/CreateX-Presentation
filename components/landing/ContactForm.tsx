@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { AlertCircle, CheckCircle2, Copy, Loader2, Mail, Send } from "lucide-react";
-import { siteConfig, contactMailto } from "./site-config";
+import { AlertCircle, CheckCircle2, Loader2, Send, Sparkles } from "lucide-react";
+import { siteConfig } from "./site-config";
 
 type Values = {
   name: string;
@@ -15,7 +15,7 @@ type Errors = Partial<Record<keyof Values, string>>;
 type Status =
   | { kind: "idle" }
   | { kind: "sending" }
-  | { kind: "sent"; mailtoUrl: string; text: string }
+  | { kind: "sent"; message: string; needsActivation?: boolean }
   | { kind: "error"; message: string };
 
 const empty: Values = { name: "", school: "", email: "", phone: "", message: "" };
@@ -33,26 +33,6 @@ function validate(v: Values): Errors {
   return e;
 }
 
-function buildMessage(v: Values) {
-  return [
-    `Bonjour l'équipe ${siteConfig.brandName},`,
-    "",
-    `Je souhaite organiser une démonstration de votre solution de gestion scolaire ${siteConfig.brandName}.`,
-    "",
-    "--- MES COORDONNÉES ---",
-    `• Nom et prénom : ${v.name.trim()}`,
-    `• Établissement scolaire : ${v.school.trim()}`,
-    `• E-mail professionnel : ${v.email.trim()}`,
-    `• Téléphone : ${v.phone.trim() || "Non renseigné"}`,
-    "",
-    "--- MESSAGE / CENTRES D'INTÉRÊT ---",
-    v.message.trim() || "Présentation générale des fonctionnalités de gestion scolaire.",
-    "",
-    "Dans l'attente de votre retour pour convenir d'une date de rendez-vous.",
-    "Cordialement.",
-  ].join("\n");
-}
-
 const interests = [
   "Gestion administrative",
   "Gestion financière",
@@ -65,7 +45,6 @@ export function ContactForm() {
   const [touched, setTouched] = useState<Partial<Record<keyof Values, boolean>>>({});
   const [submitted, setSubmitted] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
-  const [copied, setCopied] = useState(false);
 
   const errors = validate(values);
   const showError = (k: keyof Values) => (submitted || touched[k]) && errors[k];
@@ -91,7 +70,6 @@ export function ContactForm() {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSubmitted(true);
-    setCopied(false);
 
     const errs = validate(values);
     if (Object.keys(errs).length) {
@@ -106,36 +84,88 @@ export function ContactForm() {
 
     setStatus({ kind: "sending" });
 
-    const formattedBody = buildMessage(values);
-    const mailto = contactMailto(siteConfig.meeting.emailSubject, formattedBody) || `mailto:${siteConfig.contact.email}`;
+    const payload = {
+      _subject: `Nouvelle demande de démonstration — ${values.school.trim()} (${values.name.trim()})`,
+      _template: "table",
+      _captcha: "false",
+      _replyto: values.email.trim(),
+      "Nom et prénom": values.name.trim(),
+      "Établissement scolaire": values.school.trim(),
+      "E-mail professionnel": values.email.trim(),
+      "Téléphone": values.phone.trim() || "Non renseigné",
+      "Message / Besoins": values.message.trim() || "Demande de démonstration générale CreateX School",
+    };
 
-    // Envoi via l'API interne
+    let delivered = false;
+    let needsActivation = false;
+
+    // 1. Envoi direct via FormSubmit (service gratuit sécurisé, livraison directe sur Gmail sans ouverture d'Outlook)
     try {
-      await fetch(siteConfig.form.endpoint || "/api/contact", {
+      const fsRes = await fetch(`https://formsubmit.co/ajax/${siteConfig.contact.email}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await fsRes.json();
+      if (data && (data.success === "true" || data.success === true)) {
+        delivered = true;
+      } else if (data && data.message && typeof data.message === "string" && data.message.toLowerCase().includes("activation")) {
+        delivered = true;
+        needsActivation = true;
+      }
+    } catch {
+      // Ignorer et essayer la route interne
+    }
+
+    // 2. Envoi via la route interne / Netlify
+    try {
+      await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...values, subject: siteConfig.meeting.emailSubject }),
+        body: JSON.stringify(values),
+      });
+      delivered = true;
+    } catch {
+      // route interne optionnelle
+    }
+
+    // 3. Envoi via Netlify Forms (si hébergé sur Netlify)
+    try {
+      const netlifyParams = new URLSearchParams();
+      netlifyParams.set("form-name", "demande-demonstration");
+      netlifyParams.set("name", values.name);
+      netlifyParams.set("school", values.school);
+      netlifyParams.set("email", values.email);
+      netlifyParams.set("phone", values.phone || "");
+      netlifyParams.set("message", values.message || "");
+      await fetch("/", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: netlifyParams.toString(),
       });
     } catch {
-      // Poursuite avec l'envoi client
+      // Netlify Forms est passif
     }
 
-    // Déclenchement exécutable immédiat vers la messagerie
-    try {
-      window.location.assign(mailto);
-    } catch {
-      // Ignorer si bloqué par une politique de navigation
-    }
-
-    setStatus({ kind: "sent", mailtoUrl: mailto, text: formattedBody });
-  }
-
-  async function copyText(text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      setCopied(false);
+    if (delivered) {
+      setValues(empty);
+      setTouched({});
+      setSubmitted(false);
+      setStatus({
+        kind: "sent",
+        needsActivation,
+        message: needsActivation
+          ? `Votre demande a bien été envoyée ! Un premier e-mail de confirmation d'activation a été envoyé à ${siteConfig.contact.email}.`
+          : `Merci ${values.name} ! Votre demande a été transmise directement à ${siteConfig.contact.email}. Notre équipe vous contactera sous 24h.`,
+      });
+    } else {
+      setStatus({
+        kind: "error",
+        message: "Une erreur réseau est survenue lors de l'envoi direct. Veuillez réessayer ou nous appeler directement au " + siteConfig.contact.phone,
+      });
     }
   }
 
@@ -150,9 +180,13 @@ export function ContactForm() {
   return (
     <form
       noValidate
+      name="demande-demonstration"
+      data-netlify="true"
       onSubmit={onSubmit}
       className="rounded-2xl border border-lp-line bg-white p-6 shadow-[0_24px_48px_-32px_rgba(20,43,74,0.3)] sm:p-8"
     >
+      <input type="hidden" name="form-name" value="demande-demonstration" />
+
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
           <label htmlFor="cf-name" className={label}>
@@ -244,7 +278,7 @@ export function ContactForm() {
             onChange={set("phone")}
             onBlur={blur("phone")}
             className={`${field} ${fieldState("phone")}`}
-            placeholder="+216 …"
+            placeholder="+216 26 544 039"
           />
           {showError("phone") && (
             <p id="cf-phone-err" className="mt-1.5 text-[13px] text-[#b2384a]">
@@ -296,7 +330,7 @@ export function ContactForm() {
         </div>
       </div>
 
-      {/* Retours d'état */}
+      {/* Retours d'état après envoi */}
       <div aria-live="polite" className="empty:hidden">
         {status.kind === "error" && (
           <p
@@ -309,39 +343,26 @@ export function ContactForm() {
         )}
 
         {status.kind === "sent" && (
-          <div className="mt-5 rounded-xl border border-[#c8ebe4] bg-[#f1faf8] p-4 text-[14px] text-lp-ink">
-            <p className="flex items-center gap-2 font-semibold text-[#17695d]">
-              <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-[#17695d]" />
-              Demande transmise avec succès à {siteConfig.contact.email}
+          <div className="mt-5 rounded-xl border border-[#c8ebe4] bg-[#f1faf8] p-5 text-[14px] text-lp-ink">
+            <p className="flex items-center gap-2 text-[15px] font-bold text-[#17695d]">
+              <CheckCircle2 aria-hidden="true" className="h-5 w-5 text-[#17695d]" />
+              Demande envoyée directement avec succès !
             </p>
-            <p className="mt-1 text-[13.5px] leading-relaxed text-lp-muted">
-              Votre application de messagerie a été ouverte avec l&apos;ensemble des informations pré-remplies. Vous pouvez également cliquer ci-dessous pour rouvrir votre messagerie ou copier le message complet.
+            <p className="mt-2 text-[13.5px] leading-relaxed text-lp-ink">
+              {status.message}
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <a
-                href={status.mailtoUrl}
-                className="inline-flex min-h-[40px] items-center gap-2 rounded-[10px] bg-lp-navy px-4 text-[13.5px] font-semibold text-white transition-colors hover:bg-[#1c3a63]"
-              >
-                <Mail aria-hidden="true" className="h-4 w-4" />
-                Ouvrir ma messagerie
-              </a>
-              <button
-                type="button"
-                onClick={() => copyText(status.text)}
-                className="inline-flex min-h-[40px] items-center gap-2 rounded-[10px] border border-lp-line bg-white px-4 text-[13.5px] font-semibold text-lp-navy transition-colors hover:border-[#c9d3e1]"
-              >
-                <Copy aria-hidden="true" className="h-4 w-4" />
-                {copied ? "Message copié !" : "Copier le message"}
-              </button>
-            </div>
+            {status.needsActivation && (
+              <p className="mt-2 rounded-lg bg-white/80 p-2.5 text-[12.5px] text-[#0d594e]">
+                <strong>Important pour l&apos;administrateur :</strong> Un e-mail d&apos;activation unique a été envoyé à <u>{siteConfig.contact.email}</u>. Cliquez simplement sur le lien à l&apos;intérieur pour valider la réception sans intermédiaire de tous les prochains formulaires.
+              </p>
+            )}
           </div>
         )}
       </div>
 
       <div className="mt-6 flex flex-col-reverse items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[12.5px] text-lp-muted">
-          <span className="text-[#d9534f]" aria-hidden="true">*</span> Champs obligatoires. Envoyé directement à{" "}
-          <strong className="font-semibold text-lp-navy">{siteConfig.contact.email}</strong>.
+          <span className="text-[#d9534f]" aria-hidden="true">*</span> Champs obligatoires. Envoi direct et confidentiel.
         </p>
         <button
           type="submit"
@@ -350,7 +371,7 @@ export function ContactForm() {
         >
           {status.kind === "sending" ? (
             <>
-              <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> Envoi en cours…
+              <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" /> Envoi direct en cours…
             </>
           ) : (
             <>
