@@ -12,6 +12,18 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Marketing presentation website palette — edit here to rebrand the landing page
+        lp: {
+          navy: "#142B4A",
+          blue: "#3977D5",
+          bg: "#F7F9FC",
+          surface: "#FFFFFF",
+          teal: "#36B8A5",
+          ink: "#202C3C",
+          muted: "#68768A",
+          line: "#E3E8F0",
+          soft: "#EEF3FA",
+        },
         canvas: "#F4F6FA",
         surface: "#FFFFFF",
         "surface-subtle": "#F8FAFC",

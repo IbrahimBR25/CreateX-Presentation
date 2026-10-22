@@ -1,0 +1,156 @@
+/* ==========================================================================
+   Site de présentation — styles complémentaires
+   (les utilitaires principaux sont fournis par Tailwind, palette `lp`)
+   ========================================================================== */
+
+.lp-root {
+  --lp-navy: #142b4a;
+  --lp-blue: #3977d5;
+  --lp-bg: #f7f9fc;
+  --lp-surface: #ffffff;
+  --lp-teal: #36b8a5;
+  --lp-ink: #202c3c;
+  --lp-muted: #68768a;
+  --lp-line: #e3e8f0;
+  --lp-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  background-color: var(--lp-bg);
+  color: var(--lp-ink);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow-x: clip;
+}
+
+.lp-root ::selection {
+  background: #dce8fa;
+  color: var(--lp-navy);
+}
+
+.lp-display {
+  font-family: "Manrope", "Inter", system-ui, sans-serif;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.lp-root p {
+  text-wrap: pretty;
+}
+
+.lp-root :focus-visible {
+  outline: 2px solid var(--lp-blue);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Décalage pour les ancres sous la barre de navigation collante */
+.lp-root section[id] {
+  scroll-margin-top: 84px;
+}
+
+/* --- Apparition au défilement ------------------------------------------- */
+.lp-reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 600ms var(--lp-ease-out),
+    transform 600ms var(--lp-ease-out);
+  transition-delay: var(--lp-delay, 0ms);
+}
+.lp-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* --- Entrée du hero ----------------------------------------------------- */
+@keyframes lp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.lp-rise {
+  animation: lp-rise 700ms var(--lp-ease-out) both;
+  animation-delay: var(--lp-delay, 0ms);
+}
+
+/* --- Cartes flottantes (mouvement très discret) -------------------------- */
+@keyframes lp-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.lp-float {
+  animation: lp-float 7s ease-in-out infinite;
+  animation-delay: var(--lp-float-delay, 0s);
+}
+
+/* --- Panneaux de la vitrine -------------------------------------------- */
+@keyframes lp-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.lp-panel-in {
+  animation: lp-panel-in 420ms var(--lp-ease-out) both;
+}
+
+/* --- Accordéon FAQ (hauteur animée via grid) ----------------------------- */
+.lp-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 280ms var(--lp-ease-out);
+}
+.lp-collapse[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.lp-collapse > div {
+  overflow: hidden;
+}
+
+/* --- Trame de fond discrète --------------------------------------------- */
+.lp-grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(20, 43, 74, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(20, 43, 74, 0.045) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+.lp-grid-bg-dark {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* Les maquettes sont illustratives : pas de sélection de texte accidentelle */
+.lp-mock {
+  user-select: none;
+  font-feature-settings: "tnum" 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .lp-rise,
+  .lp-float,
+  .lp-panel-in {
+    animation: none;
+  }
+  .lp-collapse {
+    transition: none;
+  }
+}
