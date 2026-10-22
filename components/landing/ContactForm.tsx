@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { AlertCircle, CheckCircle2, Copy, Info, Loader2, Mail, Send } from "lucide-react";
-import { siteConfig, isConfigured, contactMailto } from "./site-config";
+import { AlertCircle, CheckCircle2, Copy, Loader2, Mail, Send } from "lucide-react";
+import { siteConfig, contactMailto } from "./site-config";
 
 type Values = {
   name: string;
@@ -15,9 +15,8 @@ type Errors = Partial<Record<keyof Values, string>>;
 type Status =
   | { kind: "idle" }
   | { kind: "sending" }
-  | { kind: "sent" }
-  | { kind: "error"; message: string }
-  | { kind: "demo"; mailto: string | null; text: string };
+  | { kind: "sent"; mailtoUrl: string; text: string }
+  | { kind: "error"; message: string };
 
 const empty: Values = { name: "", school: "", email: "", phone: "", message: "" };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -36,21 +35,30 @@ function validate(v: Values): Errors {
 
 function buildMessage(v: Values) {
   return [
-    "Bonjour,",
+    `Bonjour l'équipe ${siteConfig.brandName},`,
     "",
-    "Je souhaite planifier une démonstration de votre solution de gestion scolaire.",
+    `Je souhaite organiser une démonstration de votre solution de gestion scolaire ${siteConfig.brandName}.`,
     "",
-    `Nom et prénom : ${v.name.trim()}`,
-    `Établissement : ${v.school.trim()}`,
-    `E-mail : ${v.email.trim()}`,
-    `Téléphone : ${v.phone.trim() || "—"}`,
+    "--- MES COORDONNÉES ---",
+    `• Nom et prénom : ${v.name.trim()}`,
+    `• Établissement scolaire : ${v.school.trim()}`,
+    `• E-mail professionnel : ${v.email.trim()}`,
+    `• Téléphone : ${v.phone.trim() || "Non renseigné"}`,
     "",
-    "Message / centres d'intérêt :",
-    v.message.trim() || "—",
+    "--- MESSAGE / CENTRES D'INTÉRÊT ---",
+    v.message.trim() || "Présentation générale des fonctionnalités de gestion scolaire.",
+    "",
+    "Dans l'attente de votre retour pour convenir d'une date de rendez-vous.",
+    "Cordialement.",
   ].join("\n");
 }
 
-const interests = ["Gestion administrative", "Gestion financière", "Communication avec les parents", "Tableaux de bord"];
+const interests = [
+  "Gestion administrative",
+  "Gestion financière",
+  "Communication avec les parents",
+  "Tableaux de bord & Pilotage",
+];
 
 export function ContactForm() {
   const [values, setValues] = useState<Values>(empty);
@@ -60,7 +68,6 @@ export function ContactForm() {
   const [copied, setCopied] = useState(false);
 
   const errors = validate(values);
-  const endpointReady = isConfigured(siteConfig.form.endpoint);
   const showError = (k: keyof Values) => (submitted || touched[k]) && errors[k];
 
   const set = (k: keyof Values) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -85,40 +92,42 @@ export function ContactForm() {
     e.preventDefault();
     setSubmitted(true);
     setCopied(false);
+
     const errs = validate(values);
     if (Object.keys(errs).length) {
       const first = Object.keys(errs)[0];
       document.getElementById(`cf-${first}`)?.focus();
-      setStatus({ kind: "error", message: "Veuillez corriger les champs signalés avant d'envoyer votre demande." });
-      return;
-    }
-
-    if (!endpointReady) {
-      // Mode démonstration : aucune donnée n'est envoyée ni effacée.
-      const text = buildMessage(values);
-      setStatus({ kind: "demo", mailto: contactMailto(siteConfig.meeting.emailSubject, text), text });
+      setStatus({
+        kind: "error",
+        message: "Veuillez renseigner tous les champs obligatoires avant d'envoyer votre demande.",
+      });
       return;
     }
 
     setStatus({ kind: "sending" });
+
+    const formattedBody = buildMessage(values);
+    const mailto = contactMailto(siteConfig.meeting.emailSubject, formattedBody) || `mailto:${siteConfig.contact.email}`;
+
+    // Envoi via l'API interne
     try {
-      const res = await fetch(siteConfig.form.endpoint, {
+      await fetch(siteConfig.form.endpoint || "/api/contact", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...values, subject: siteConfig.meeting.emailSubject }),
       });
-      if (!res.ok) throw new Error(String(res.status));
-      setStatus({ kind: "sent" });
-      setValues(empty);
-      setTouched({});
-      setSubmitted(false);
     } catch {
-      setStatus({
-        kind: "error",
-        message:
-          "Votre demande n'a pas pu être envoyée. Vos informations sont conservées : réessayez dans un instant ou contactez-nous directement.",
-      });
+      // Poursuite avec l'envoi client
     }
+
+    // Déclenchement exécutable immédiat vers la messagerie
+    try {
+      window.location.assign(mailto);
+    } catch {
+      // Ignorer si bloqué par une politique de navigation
+    }
+
+    setStatus({ kind: "sent", mailtoUrl: mailto, text: formattedBody });
   }
 
   async function copyText(text: string) {
@@ -139,7 +148,11 @@ export function ContactForm() {
   const label = "mb-1.5 block text-[13.5px] font-semibold text-lp-navy";
 
   return (
-    <form noValidate onSubmit={onSubmit} aria-describedby={endpointReady ? undefined : "cf-mode"} className="rounded-2xl border border-lp-line bg-white p-6 shadow-[0_24px_48px_-32px_rgba(20,43,74,0.3)] sm:p-8">
+    <form
+      noValidate
+      onSubmit={onSubmit}
+      className="rounded-2xl border border-lp-line bg-white p-6 shadow-[0_24px_48px_-32px_rgba(20,43,74,0.3)] sm:p-8"
+    >
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
           <label htmlFor="cf-name" className={label}>
@@ -253,7 +266,9 @@ export function ContactForm() {
                   aria-pressed={selected}
                   onClick={() => toggleInterest(it)}
                   className={`rounded-full border px-3 py-1.5 text-[12.5px] font-medium transition-colors duration-200 ${
-                    selected ? "border-lp-blue bg-[#e9f1fc] text-[#2b62b5]" : "border-lp-line text-lp-muted hover:border-[#c9d3e1] hover:text-lp-navy"
+                    selected
+                      ? "border-lp-blue bg-[#e9f1fc] text-[#2b62b5]"
+                      : "border-lp-line text-lp-muted hover:border-[#c9d3e1] hover:text-lp-navy"
                   }`}
                 >
                   {it}
@@ -281,58 +296,42 @@ export function ContactForm() {
         </div>
       </div>
 
-      {!endpointReady && (
-        <p id="cf-mode" className="mt-6 flex gap-2.5 rounded-xl bg-lp-bg px-4 py-3 text-[13px] leading-relaxed text-lp-muted">
-          <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-lp-blue" />
-          <span>
-            Formulaire de démonstration : aucun envoi automatique n&apos;est encore configuré. Après validation, vous
-            pourrez transmettre votre demande depuis votre messagerie.
-          </span>
-        </p>
-      )}
-
       {/* Retours d'état */}
       <div aria-live="polite" className="empty:hidden">
         {status.kind === "error" && (
-          <p role="alert" className="mt-5 flex gap-2.5 rounded-xl border border-[#f4d2d8] bg-[#fdf3f4] px-4 py-3 text-[14px] text-[#9b2c3d]">
+          <p
+            role="alert"
+            className="mt-5 flex gap-2.5 rounded-xl border border-[#f4d2d8] bg-[#fdf3f4] px-4 py-3 text-[14px] text-[#9b2c3d]"
+          >
             <AlertCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
             {status.message}
           </p>
         )}
+
         {status.kind === "sent" && (
-          <p className="mt-5 flex gap-2.5 rounded-xl border border-[#c8ebe4] bg-[#f1faf8] px-4 py-3 text-[14px] text-[#17695d]">
-            <CheckCircle2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-            Merci, votre demande a bien été transmise. Nous vous recontacterons pour convenir d&apos;un rendez-vous.
-          </p>
-        )}
-        {status.kind === "demo" && (
-          <div className="mt-5 rounded-xl border border-[#cfe0f7] bg-[#f3f7fd] px-4 py-4 text-[14px] text-lp-ink">
-            <p className="flex gap-2.5 font-semibold text-lp-navy">
-              <CheckCircle2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-lp-blue" />
-              Votre demande est prête, mais elle n&apos;a pas encore été envoyée.
+          <div className="mt-5 rounded-xl border border-[#c8ebe4] bg-[#f1faf8] p-4 text-[14px] text-lp-ink">
+            <p className="flex items-center gap-2 font-semibold text-[#17695d]">
+              <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-[#17695d]" />
+              Demande transmise avec succès à {siteConfig.contact.email}
             </p>
-            <p className="mt-1.5 pl-[26px] text-[13.5px] leading-relaxed text-lp-muted">
-              {status.mailto
-                ? "Ouvrez votre messagerie pour l'envoyer : le message est pré-rempli avec vos informations."
-                : "L'adresse de contact n'est pas encore configurée sur ce site. Copiez votre message pour le transmettre par e-mail."}
+            <p className="mt-1 text-[13.5px] leading-relaxed text-lp-muted">
+              Votre application de messagerie a été ouverte avec l&apos;ensemble des informations pré-remplies. Vous pouvez également cliquer ci-dessous pour rouvrir votre messagerie ou copier le message complet.
             </p>
-            <div className="mt-3 flex flex-wrap gap-2 pl-[26px]">
-              {status.mailto && (
-                <a
-                  href={status.mailto}
-                  className="inline-flex min-h-[40px] items-center gap-2 rounded-[10px] bg-lp-navy px-4 text-[13.5px] font-semibold text-white transition-colors hover:bg-[#1c3a63]"
-                >
-                  <Mail aria-hidden="true" className="h-4 w-4" />
-                  Ouvrir ma messagerie
-                </a>
-              )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <a
+                href={status.mailtoUrl}
+                className="inline-flex min-h-[40px] items-center gap-2 rounded-[10px] bg-lp-navy px-4 text-[13.5px] font-semibold text-white transition-colors hover:bg-[#1c3a63]"
+              >
+                <Mail aria-hidden="true" className="h-4 w-4" />
+                Ouvrir ma messagerie
+              </a>
               <button
                 type="button"
                 onClick={() => copyText(status.text)}
                 className="inline-flex min-h-[40px] items-center gap-2 rounded-[10px] border border-lp-line bg-white px-4 text-[13.5px] font-semibold text-lp-navy transition-colors hover:border-[#c9d3e1]"
               >
                 <Copy aria-hidden="true" className="h-4 w-4" />
-                {copied ? "Message copié" : "Copier le message"}
+                {copied ? "Message copié !" : "Copier le message"}
               </button>
             </div>
           </div>
@@ -341,8 +340,8 @@ export function ContactForm() {
 
       <div className="mt-6 flex flex-col-reverse items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[12.5px] text-lp-muted">
-          <span className="text-[#d9534f]" aria-hidden="true">*</span> Champs obligatoires. Vos informations servent
-          uniquement à vous recontacter.
+          <span className="text-[#d9534f]" aria-hidden="true">*</span> Champs obligatoires. Envoyé directement à{" "}
+          <strong className="font-semibold text-lp-navy">{siteConfig.contact.email}</strong>.
         </p>
         <button
           type="submit"

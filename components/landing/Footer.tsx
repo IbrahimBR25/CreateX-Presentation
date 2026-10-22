@@ -70,7 +70,6 @@ export function Footer() {
           <p>
             © {siteConfig.copyrightYear} {siteConfig.brandName}. Tous droits réservés.
           </p>
-          <p>Les écrans présentés sur ce site sont des illustrations ; les données affichées sont fictives.</p>
         </div>
       </div>
     </footer>

@@ -20,7 +20,7 @@ export const siteConfig = {
 
   contact: {
     /** Adresse e-mail officielle de contact. */
-    email: "createx1000@gmail.com",
+    email: "createx100@gmail.com",
     /** Numéro de téléphone direct. */
     phone: "+216 26 544 039",
     /** URL LinkedIn (optionnelle). */
@@ -38,8 +38,8 @@ export const siteConfig = {
   },
 
   form: {
-    /** Point de terminaison optionnel pour le formulaire. */
-    endpoint: "",
+    /** Point de terminaison pour l'envoi direct par e-mail. */
+    endpoint: "/api/contact",
   },
 
   /** Année affichée dans le copyright. */
