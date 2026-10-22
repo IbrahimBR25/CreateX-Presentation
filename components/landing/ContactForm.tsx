@@ -120,7 +120,7 @@ export function ContactForm() {
       // Ignorer et essayer la route interne
     }
 
-    // 2. Envoi via la route interne / Netlify
+    // 2. Envoi via la route interne
     try {
       await fetch("/api/contact", {
         method: "POST",
@@ -130,24 +130,6 @@ export function ContactForm() {
       delivered = true;
     } catch {
       // route interne optionnelle
-    }
-
-    // 3. Envoi via Netlify Forms (si hébergé sur Netlify)
-    try {
-      const netlifyParams = new URLSearchParams();
-      netlifyParams.set("form-name", "demande-demonstration");
-      netlifyParams.set("name", values.name);
-      netlifyParams.set("school", values.school);
-      netlifyParams.set("email", values.email);
-      netlifyParams.set("phone", values.phone || "");
-      netlifyParams.set("message", values.message || "");
-      await fetch("/", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: netlifyParams.toString(),
-      });
-    } catch {
-      // Netlify Forms est passif
     }
 
     if (delivered) {
@@ -180,13 +162,9 @@ export function ContactForm() {
   return (
     <form
       noValidate
-      name="demande-demonstration"
-      data-netlify="true"
       onSubmit={onSubmit}
       className="rounded-2xl border border-lp-line bg-white p-6 shadow-[0_24px_48px_-32px_rgba(20,43,74,0.3)] sm:p-8"
     >
-      <input type="hidden" name="form-name" value="demande-demonstration" />
-
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
           <label htmlFor="cf-name" className={label}>
